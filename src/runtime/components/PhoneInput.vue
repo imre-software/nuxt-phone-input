@@ -9,6 +9,7 @@ interface Country {
   icon: string
   label: string
   value: string
+  direction: 'ltr' | 'rtl'
 }
 
 const props = withDefaults(defineProps<{
@@ -32,8 +33,19 @@ const asYouType = ref<AsYouType | null>(null)
 const countries = computed<Country[]>(() => {
   return getCountries().map(code => {
     const dialCode = getCountryCallingCode(code)
-    // Use Intl.DisplayNames with the country's own locale to get native name
-    const displayNames = new Intl.DisplayNames([code], { type: 'region' })
+
+    // Infer the primary language for this country using Intl.Locale
+    const localeForCountry = new Intl.Locale('und', { region: code })
+    const maximizedLocale = localeForCountry.maximize()
+    const languageCode = maximizedLocale.language
+
+    // Get text direction (RTL or LTR) - not supported in Firefox yet
+    const direction = typeof (localeForCountry as any).getTextInfo === 'function'
+      ? (localeForCountry as any).getTextInfo().direction
+      : 'ltr' as 'ltr' | 'rtl'
+
+    // Get country name in its native language
+    const displayNames = new Intl.DisplayNames([languageCode], { type: 'region' })
     const name = displayNames.of(code) || code
 
     return {
@@ -42,7 +54,8 @@ const countries = computed<Country[]>(() => {
       name,
       icon: `circle-flags:${code.toLowerCase()}`,
       label: `${name} (+${dialCode})`,
-      value: code
+      value: code,
+      direction
     }
   }).sort((a, b) => a.name.localeCompare(b.name))
 })
@@ -196,9 +209,9 @@ onMounted(() => {
 
       <!-- Full width dropdown items: flag + full label -->
       <template #item="{ item }">
-        <div class="flex items-center gap-2">
+        <div class="flex items-center gap-2 w-full" :dir="item.direction">
           <UIcon :name="item.icon" class="size-5 shrink-0" />
-          <span class="">{{ item.label }}</span>
+          <span>{{ item.label }}</span>
         </div>
       </template>
     </USelectMenu>
