@@ -1,5 +1,11 @@
 <script setup lang="ts">
-import { AsYouType, getCountries, getCountryCallingCode, getExampleNumber, parsePhoneNumber } from 'libphonenumber-js/mobile'
+import {
+  AsYouType,
+  getCountries,
+  getCountryCallingCode,
+  getExampleNumber,
+  parsePhoneNumber
+} from 'libphonenumber-js/mobile'
 import examples from 'libphonenumber-js/mobile/examples'
 
 interface Country {
@@ -18,9 +24,11 @@ const props = withDefaults(defineProps<{
   size?: 'sm' | 'md' | 'lg' | 'xl'
   disabled?: boolean
   language?: 'country' | 'browser'
+  e164?: boolean
 }>(), {
   size: 'md',
-  language: 'country'
+  language: 'country',
+  e164: false
 })
 
 const emit = defineEmits<{
@@ -44,9 +52,9 @@ const countries = computed<Country[]>(() => {
     // Get browser text direction
     try {
       const locale = new Intl.Locale(navigator.language)
-      browserDirection = typeof (locale as any).getTextInfo === 'function'
-        ? (locale as any).getTextInfo().direction
-        : 'ltr' as 'ltr' | 'rtl'
+      browserDirection = typeof ( locale as any ).getTextInfo === 'function'
+          ? ( locale as any ).getTextInfo().direction
+          : 'ltr' as 'ltr' | 'rtl'
     } catch {
       browserDirection = 'ltr'
     }
@@ -65,18 +73,18 @@ const countries = computed<Country[]>(() => {
     } else {
       // Use country's native language (current behavior)
       // Infer the primary language for this country using Intl.Locale
-      const localeForCountry = new Intl.Locale('und', { region: code })
+      const localeForCountry = new Intl.Locale('und', {region: code})
       const maximizedLocale = localeForCountry.maximize()
       languageCode = maximizedLocale.language
 
       // Get text direction (RTL or LTR) - not supported in Firefox yet
-      direction = typeof (localeForCountry as any).getTextInfo === 'function'
-        ? (localeForCountry as any).getTextInfo().direction
-        : 'ltr' as 'ltr' | 'rtl'
+      direction = typeof ( localeForCountry as any ).getTextInfo === 'function'
+          ? ( localeForCountry as any ).getTextInfo().direction
+          : 'ltr' as 'ltr' | 'rtl'
     }
 
     // Get country name in the determined language
-    const displayNames = new Intl.DisplayNames([languageCode], { type: 'region' })
+    const displayNames = new Intl.DisplayNames([languageCode], {type: 'region'})
     const name = displayNames.of(code) || code
 
     return {
@@ -113,7 +121,7 @@ watch(selectedCountry, (newCountry) => {
 
 // Handle input with AsYouType formatting
 const handleInput = (event: Event) => {
-  const input = (event.target as HTMLInputElement).value
+  const input = ( event.target as HTMLInputElement ).value
 
   if (asYouType.value && selectedCountry.value) {
     asYouType.value.reset()
@@ -132,16 +140,10 @@ const updateModelValue = () => {
   }
 
   try {
-    const phoneNumber = parsePhoneNumber(localNumber.value, selectedCountry.value)
-
-    if (phoneNumber?.isValid()) {
-      const dialCode = getCountryCallingCode(selectedCountry.value)
-      // Output format: dialCode + nationalNumber (no +, no spaces)
-      // parsePhoneNumber automatically removes trunk prefix (leading 0)
-      emit('update:modelValue', `${dialCode}${phoneNumber.nationalNumber}`)
-    } else {
-      emit('update:modelValue', '')
-    }
+    // Always use built-in E.164 format for resilience
+    const e164Format = parsePhoneNumber(localNumber.value, selectedCountry.value)
+        .format('E.164')
+    emit('update:modelValue', e164Format.replace('+', props.e164 ? '+' : ''))
   } catch (error) {
     // Invalid input, don't update model
     console.warn('Phone validation error:', error)
@@ -213,21 +215,21 @@ onMounted(() => {
   <div class="flex flex-col sm:flex-row gap-2">
     <!-- Country Selector -->
     <USelectMenu
-      v-model="selectedCountry"
-      :items="countries"
-      :disabled="disabled"
-      value-key="code"
-      placeholder="Country"
-      :size="size"
-      :content="{ align: 'start' }"
-      :ui="{ base: 'w-24', content: 'w-fit' }"
+        v-model="selectedCountry"
+        :items="countries"
+        :disabled="disabled"
+        value-key="code"
+        placeholder="Country"
+        :size="size"
+        :content="{ align: 'start' }"
+        :ui="{ base: 'w-24', content: 'w-fit' }"
     >
       <!-- Compact trigger: flag + dial code only -->
       <template #default="{ modelValue }">
         <div v-if="modelValue" class="flex items-center gap-1.5 w-24 max-w-24">
           <UIcon
-            :name="`circle-flags:${modelValue.toLowerCase()}`"
-            class="size-5 shrink-0"
+              :name="`circle-flags:${modelValue.toLowerCase()}`"
+              class="size-5 shrink-0"
           />
           <span class="text-sm font-medium">
             +{{ countries.find(c => c.code === modelValue)?.dialCode }}
@@ -239,7 +241,7 @@ onMounted(() => {
       <!-- Full width dropdown items: flag + full label -->
       <template #item="{ item }">
         <div class="flex items-center gap-2 w-full" :dir="item.direction">
-          <UIcon :name="item.icon" class="size-5 shrink-0" />
+          <UIcon :name="item.icon" class="size-5 shrink-0"/>
           <span>{{ item.label }}</span>
         </div>
       </template>
@@ -247,13 +249,13 @@ onMounted(() => {
 
     <!-- Phone Number Input with AsYouType formatting -->
     <UInput
-      :model-value="localNumber"
-      type="tel"
-      :size="size"
-      :disabled="disabled || !selectedCountry"
-      :placeholder="placeholder"
-      :required="required"
-      @input="handleInput"
+        :model-value="localNumber"
+        type="tel"
+        :size="size"
+        :disabled="disabled || !selectedCountry"
+        :placeholder="placeholder"
+        :required="required"
+        @input="handleInput"
     />
   </div>
 </template>
