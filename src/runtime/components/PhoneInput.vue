@@ -17,8 +17,10 @@ const props = withDefaults(defineProps<{
   required?: boolean
   size?: 'sm' | 'md' | 'lg' | 'xl'
   disabled?: boolean
+  language?: 'country' | 'browser'
 }>(), {
-  size: 'md'
+  size: 'md',
+  language: 'country'
 })
 
 const emit = defineEmits<{
@@ -29,22 +31,51 @@ const selectedCountry = ref<string>('')
 const localNumber = ref<string>('')
 const asYouType = ref<AsYouType | null>(null)
 
-// Build countries list with native names
+// Build countries list with native names or browser language
 const countries = computed<Country[]>(() => {
+  // Determine browser language and direction once if needed
+  let browserLanguageCode: string | null = null
+  let browserDirection: 'ltr' | 'rtl' = 'ltr'
+
+  if (props.language === 'browser') {
+    const browserLocale = navigator.language.split('-')[0] // e.g., 'en' from 'en-US'
+    browserLanguageCode = browserLocale
+
+    // Get browser text direction
+    try {
+      const locale = new Intl.Locale(navigator.language)
+      browserDirection = typeof (locale as any).getTextInfo === 'function'
+        ? (locale as any).getTextInfo().direction
+        : 'ltr' as 'ltr' | 'rtl'
+    } catch {
+      browserDirection = 'ltr'
+    }
+  }
+
   return getCountries().map(code => {
     const dialCode = getCountryCallingCode(code)
 
-    // Infer the primary language for this country using Intl.Locale
-    const localeForCountry = new Intl.Locale('und', { region: code })
-    const maximizedLocale = localeForCountry.maximize()
-    const languageCode = maximizedLocale.language
+    let languageCode: string
+    let direction: 'ltr' | 'rtl'
 
-    // Get text direction (RTL or LTR) - not supported in Firefox yet
-    const direction = typeof (localeForCountry as any).getTextInfo === 'function'
-      ? (localeForCountry as any).getTextInfo().direction
-      : 'ltr' as 'ltr' | 'rtl'
+    if (props.language === 'browser' && browserLanguageCode) {
+      // Use browser language for all countries
+      languageCode = browserLanguageCode
+      direction = browserDirection
+    } else {
+      // Use country's native language (current behavior)
+      // Infer the primary language for this country using Intl.Locale
+      const localeForCountry = new Intl.Locale('und', { region: code })
+      const maximizedLocale = localeForCountry.maximize()
+      languageCode = maximizedLocale.language
 
-    // Get country name in its native language
+      // Get text direction (RTL or LTR) - not supported in Firefox yet
+      direction = typeof (localeForCountry as any).getTextInfo === 'function'
+        ? (localeForCountry as any).getTextInfo().direction
+        : 'ltr' as 'ltr' | 'rtl'
+    }
+
+    // Get country name in the determined language
     const displayNames = new Intl.DisplayNames([languageCode], { type: 'region' })
     const name = displayNames.of(code) || code
 
@@ -190,7 +221,6 @@ onMounted(() => {
       :size="size"
       :content="{ align: 'start' }"
       :ui="{ content: 'w-fit' }"
-
       class="w-24"
     >
       <!-- Compact trigger: flag + dial code only -->
