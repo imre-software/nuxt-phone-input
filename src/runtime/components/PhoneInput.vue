@@ -220,12 +220,11 @@ onMounted(() => {
       placeholder="Country"
       :size="size"
       :content="{ align: 'start' }"
-      :ui="{ content: 'w-fit' }"
-      class="w-24"
+      :ui="{ base: 'w-24', content: 'w-fit' }"
     >
       <!-- Compact trigger: flag + dial code only -->
       <template #default="{ modelValue }">
-        <div v-if="modelValue" class="flex items-center gap-1.5">
+        <div v-if="modelValue" class="flex items-center gap-1.5 w-24 max-w-24">
           <UIcon
             :name="`circle-flags:${modelValue.toLowerCase()}`"
             class="size-5 shrink-0"
