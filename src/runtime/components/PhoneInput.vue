@@ -18,8 +18,15 @@ interface Country {
   direction: 'ltr' | 'rtl'
 }
 
+interface CountryInfo {
+  name: string
+  example: string
+}
+
 const props = withDefaults(defineProps<{
   modelValue?: string
+  valid?: boolean
+  country?: CountryInfo
   required?: boolean
   size?: 'sm' | 'md' | 'lg' | 'xl'
   disabled?: boolean
@@ -33,6 +40,8 @@ const props = withDefaults(defineProps<{
 
 const emit = defineEmits<{
   'update:modelValue': [value: string]
+  'update:valid': [isValid: boolean]
+  'update:country': [info: CountryInfo]
 }>()
 
 const selectedCountry = ref<string>('')
@@ -116,10 +125,14 @@ watch(selectedCountry, (newCountry) => {
   if (newCountry) {
     asYouType.value = new AsYouType(newCountry)
     localNumber.value = ''
+    // Emit country info when country changes
+    emit('update:country', getCountryInfo())
+    // Validate on country change
+    handleBlur()
   }
 })
 
-// Handle input with AsYouType formatting
+// Handle input with AsYouType formatting (local only, no emit)
 const handleInput = (event: Event) => {
   const input = ( event.target as HTMLInputElement ).value
 
@@ -132,10 +145,36 @@ const handleInput = (event: Event) => {
   }
 }
 
-// Update model value with validated phone number
-const updateModelValue = () => {
+// Get country info for error messages
+const getCountryInfo = (): CountryInfo => {
+  if (!selectedCountry.value) {
+    return { name: '', example: '' }
+  }
+
+  const country = countries.value.find(c => c.code === selectedCountry.value)
+  let exampleNumber = ''
+
+  try {
+    const example = getExampleNumber(selectedCountry.value, examples)
+    exampleNumber = example?.formatNational() || ''
+  } catch {
+    exampleNumber = ''
+  }
+
+  return {
+    name: country?.name || '',
+    example: exampleNumber
+  }
+}
+
+// Validate and emit on blur
+const handleBlur = () => {
+  // Emit country info
+  emit('update:country', getCountryInfo())
+
   if (!selectedCountry.value || !localNumber.value.trim()) {
     emit('update:modelValue', '')
+    emit('update:valid', false)
     return
   }
 
@@ -144,14 +183,14 @@ const updateModelValue = () => {
     const e164Format = parsePhoneNumber(localNumber.value, selectedCountry.value)
         .format('E.164')
     emit('update:modelValue', e164Format.replace('+', props.e164 ? '+' : ''))
+    emit('update:valid', true)
   } catch (error) {
-    // Invalid input, don't update model
+    // Invalid input - emit raw input so parent can distinguish from empty
     console.warn('Phone validation error:', error)
-    emit('update:modelValue', '')
+    emit('update:modelValue', localNumber.value)
+    emit('update:valid', false)
   }
 }
-
-watch([selectedCountry, localNumber], updateModelValue)
 
 // Detect country from browser locale
 const detectCountryFromBrowser = (): string => {
@@ -256,6 +295,7 @@ onMounted(() => {
         :placeholder="placeholder"
         :required="required"
         @input="handleInput"
+        @blur="handleBlur"
     />
   </div>
 </template>
