@@ -34,7 +34,7 @@ const props = withDefaults(defineProps<{
   e164?: boolean
 }>(), {
   size: 'md',
-  language: 'country',
+  language: 'browser',
   e164: false
 })
 
@@ -48,64 +48,119 @@ const selectedCountry = ref<string>('')
 const localNumber = ref<string>('')
 const asYouType = ref<AsYouType | null>(null)
 
-// Build countries list with native names or browser language
-const countries = computed<Country[]>(() => {
-  // Determine browser language and direction once if needed
-  let browserLanguageCode: string | null = null
-  let browserDirection: 'ltr' | 'rtl' = 'ltr'
+// Cache for country lists by language key (browser, country, or specific language code)
+const countryListCache = ref<Map<string, Country[]>>(new Map())
+const countries = ref<Country[]>([])
+const isInitializing = ref(false)
 
-  if (props.language === 'browser') {
-    const browserLocale = navigator.language.split('-')[0] // e.g., 'en' from 'en-US'
-    browserLanguageCode = browserLocale
+// Initialize countries list with caching and lazy loading
+const initializeCountries = () => {
+  if (isInitializing.value) return
 
-    // Get browser text direction
-    try {
-      const locale = new Intl.Locale(navigator.language)
-      browserDirection = typeof ( locale as any ).getTextInfo === 'function'
-          ? ( locale as any ).getTextInfo().direction
-          : 'ltr' as 'ltr' | 'rtl'
-    } catch {
-      browserDirection = 'ltr'
-    }
+  // Generate cache key based on language mode
+  const cacheKey = props.language === 'browser'
+    ? `browser:${navigator.language}`
+    : 'country'
+
+  // Return cached data if available (instant!)
+  if (countryListCache.value.has(cacheKey)) {
+    countries.value = countryListCache.value.get(cacheKey)!
+    return
   }
 
-  return getCountries().map(code => {
-    const dialCode = getCountryCallingCode(code)
+  // Compute country list once and cache it
+  isInitializing.value = true
 
-    let languageCode: string
-    let direction: 'ltr' | 'rtl'
+  try {
+    // Determine browser language and direction once if needed
+    let browserLanguageCode: string = ''
+    let browserDirection: 'ltr' | 'rtl' = 'ltr'
+    let browserDisplayNames: Intl.DisplayNames | null = null
 
-    if (props.language === 'browser' && browserLanguageCode) {
-      // Use browser language for all countries
-      languageCode = browserLanguageCode
-      direction = browserDirection
-    } else {
-      // Use country's native language (current behavior)
-      // Infer the primary language for this country using Intl.Locale
-      const localeForCountry = new Intl.Locale('und', {region: code})
-      const maximizedLocale = localeForCountry.maximize()
-      languageCode = maximizedLocale.language
+    if (props.language === 'browser') {
+      browserLanguageCode = navigator.language.split('-')[0] || 'en' // e.g., 'en' from 'en-US'
 
-      // Get text direction (RTL or LTR) - not supported in Firefox yet
-      direction = typeof ( localeForCountry as any ).getTextInfo === 'function'
-          ? ( localeForCountry as any ).getTextInfo().direction
+      // Get browser text direction
+      try {
+        const locale = new Intl.Locale(navigator.language)
+        browserDirection = typeof (locale as any).getTextInfo === 'function'
+          ? (locale as any).getTextInfo().direction
           : 'ltr' as 'ltr' | 'rtl'
+      } catch {
+        browserDirection = 'ltr'
+      }
+
+      // MAJOR OPTIMIZATION: Create ONE DisplayNames instance for all countries in browser mode
+      browserDisplayNames = new Intl.DisplayNames([browserLanguageCode], { type: 'region' })
     }
 
-    // Get country name in the determined language
-    const displayNames = new Intl.DisplayNames([languageCode], {type: 'region'})
-    const name = displayNames.of(code) || code
-
-    return {
-      code,
-      dialCode,
-      name,
-      icon: `circle-flags:${code.toLowerCase()}`,
-      label: `${name} (+${dialCode})`,
-      value: code,
-      direction
+    // For country mode: cache DisplayNames instances per language
+    const displayNamesCache = new Map<string, Intl.DisplayNames>()
+    const getDisplayNames = (languageCode: string): Intl.DisplayNames => {
+      if (!displayNamesCache.has(languageCode)) {
+        displayNamesCache.set(languageCode, new Intl.DisplayNames([languageCode], { type: 'region' }))
+      }
+      return displayNamesCache.get(languageCode)!
     }
-  }).sort((a, b) => a.name.localeCompare(b.name))
+
+    // For country mode: cache locale maximization results
+    const localeInfoCache = new Map<string, { language: string, direction: 'ltr' | 'rtl' }>()
+    const getLocaleInfo = (countryCode: string) => {
+      if (!localeInfoCache.has(countryCode)) {
+        const locale = new Intl.Locale('und', { region: countryCode })
+        const maximized = locale.maximize()
+        const direction = typeof (locale as any).getTextInfo === 'function'
+          ? (locale as any).getTextInfo().direction
+          : 'ltr' as 'ltr' | 'rtl'
+        localeInfoCache.set(countryCode, { language: maximized.language, direction })
+      }
+      return localeInfoCache.get(countryCode)!
+    }
+
+    const countryList = getCountries().map(code => {
+      const dialCode = getCountryCallingCode(code)
+
+      let languageCode: string
+      let direction: 'ltr' | 'rtl'
+      let displayNames: Intl.DisplayNames
+
+      if (props.language === 'browser' && browserDisplayNames) {
+        // Use browser language for all countries (FAST PATH)
+        direction = browserDirection
+        displayNames = browserDisplayNames // Reuse the single instance!
+      } else {
+        // Use country's native language (current behavior)
+        const localeInfo = getLocaleInfo(code)
+        languageCode = localeInfo.language
+        direction = localeInfo.direction
+        displayNames = getDisplayNames(languageCode)
+      }
+
+      // Get country name in the determined language
+      const name = displayNames.of(code) || code
+
+      return {
+        code,
+        dialCode,
+        name,
+        icon: `circle-flags:${code.toLowerCase()}`,
+        label: `${name} (+${dialCode})`,
+        value: code,
+        direction
+      }
+    }).sort((a, b) => a.name.localeCompare(b.name))
+
+    // Cache the result
+    countryListCache.value.set(cacheKey, countryList)
+    countries.value = countryList
+  } finally {
+    isInitializing.value = false
+  }
+}
+
+// Watch language prop changes and re-initialize if needed
+watch(() => props.language, () => {
+  initializeCountries()
 })
 
 // Dynamic placeholder based on selected country
@@ -231,8 +286,9 @@ const detectCountryFromBrowser = (): string => {
   return 'US'
 }
 
-// Parse initial value if provided, or detect country from browser
+// Initialize countries on mount
 onMounted(() => {
+  // Parse initial value or detect country first
   if (props.modelValue) {
     try {
       const phoneNumber = parsePhoneNumber(`+${props.modelValue}`)
@@ -247,11 +303,16 @@ onMounted(() => {
     // Auto-detect country from browser
     selectedCountry.value = detectCountryFromBrowser()
   }
+
+  // Initialize country list immediately
+  // This runs during mount (before user can interact) and populates the cache
+  // Subsequent dropdown opens are instant from cache
+  initializeCountries()
 })
 </script>
 
 <template>
-  <div class="flex flex-col sm:flex-row gap-2">
+  <div class="flex gap-2">
     <!-- Country Selector -->
     <USelectMenu
         v-model="selectedCountry"
@@ -261,7 +322,8 @@ onMounted(() => {
         placeholder="Country"
         :size="size"
         :content="{ align: 'start' }"
-        :ui="{ base: 'w-24', content: 'w-fit' }"
+        :ui="{ base: 'w-24', content: 'w-fit max-w-96' }"
+        virtualized
     >
       <!-- Compact trigger: flag + dial code only -->
       <template #default="{ modelValue }">
@@ -271,7 +333,7 @@ onMounted(() => {
               class="size-5 shrink-0"
           />
           <span class="text-sm font-medium">
-            +{{ countries.find(c => c.code === modelValue)?.dialCode }}
+            +{{ countries.find((country: Country) => country.code === modelValue)?.dialCode }}
           </span>
         </div>
         <span v-else class="text-dimmed">Country</span>
