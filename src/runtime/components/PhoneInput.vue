@@ -24,9 +24,6 @@ interface CountryInfo {
 }
 
 const props = withDefaults(defineProps<{
-  modelValue?: string
-  valid?: boolean
-  country?: CountryInfo
   required?: boolean
   size?: 'sm' | 'md' | 'lg' | 'xl'
   disabled?: boolean
@@ -36,10 +33,13 @@ const props = withDefaults(defineProps<{
   language: 'browser'
 })
 
+const modelValue = defineModel<string>({ default: '' })
+const valid = defineModel<boolean>('valid', { default: false })
+const country = defineModel<CountryInfo>('country', { default: () => ({ name: '', example: '' }) })
+
 const emit = defineEmits<{
-  'update:modelValue': [value: string]
-  'update:valid': [isValid: boolean]
-  'update:country': [info: CountryInfo]
+  'input': []
+  'blur': []
 }>()
 
 const selectedCountry = ref<string>('')
@@ -178,10 +178,9 @@ watch(selectedCountry, (newCountry) => {
   if (newCountry) {
     asYouType.value = new AsYouType(newCountry)
     localNumber.value = ''
-    // Emit country info when country changes
-    emit('update:country', getCountryInfo())
-    // Validate on country change
-    handleBlur()
+    // Update country info when country changes
+    country.value = getCountryInfo()
+    // Note: Don't emit blur here - only on actual user blur to prevent isDirty from being set during initialization
   }
 })
 
@@ -194,11 +193,14 @@ const handleInput = (event: Event) => {
   const formatted = asYouType.value.input(input)
   localNumber.value = formatted
 
-  // Validate and emit on every keystroke
+  // Validate and update models on every keystroke
   const { isValid, phoneNumber } = validateAndParsePhoneNumber()
-  emit('update:valid', isValid)
-  emit('update:country', getCountryInfo())
-  emit('update:modelValue', phoneNumber)
+  valid.value = isValid
+  country.value = getCountryInfo()
+  modelValue.value = phoneNumber
+
+  // Emit input event for standard DOM-like API
+  emit('input')
 }
 
 // Get country info for error messages
@@ -230,8 +232,11 @@ const validateAndParsePhoneNumber = (): { isValid: boolean, phoneNumber: string 
 
   try {
     const parsed = parsePhoneNumberWithError(localNumber.value, selectedCountry.value)
-    phoneNumber = parsed.format('E.164')
-    isValid = true
+    // Check if number is actually valid (not just parseable)
+    if (parsed.isValid()) {
+      phoneNumber = parsed.format('E.164')
+      isValid = true
+    }
   } catch {
     // Parse failed - keep raw value
   } finally {
@@ -239,9 +244,10 @@ const validateAndParsePhoneNumber = (): { isValid: boolean, phoneNumber: string 
   }
 }
 
-// Handle blur - emit country info for parent to mark field as dirty
+// Handle blur - emit blur event for parent to mark field as dirty
 const handleBlur = () => {
-  emit('update:country', getCountryInfo())
+  country.value = getCountryInfo()
+  emit('blur')
   // Validation already handled in handleInput
 }
 
@@ -287,9 +293,9 @@ const detectCountryFromBrowser = (): string => {
 // Initialize countries on mount
 onMounted(() => {
   // Parse initial value or detect country first
-  if (props.modelValue) {
+  if (modelValue.value) {
     try {
-      const phoneNumber = parsePhoneNumber(`+${props.modelValue}`)
+      const phoneNumber = parsePhoneNumberWithError(`+${modelValue.value}`)
       if (phoneNumber) {
         selectedCountry.value = phoneNumber.country || ''
         localNumber.value = phoneNumber.formatNational()
