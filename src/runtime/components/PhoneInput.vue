@@ -4,7 +4,7 @@ import {
   getCountries,
   getCountryCallingCode,
   getExampleNumber,
-  parsePhoneNumber
+  parsePhoneNumberWithError
 } from 'libphonenumber-js/mobile'
 import examples from 'libphonenumber-js/mobile/examples'
 
@@ -31,11 +31,9 @@ const props = withDefaults(defineProps<{
   size?: 'sm' | 'md' | 'lg' | 'xl'
   disabled?: boolean
   language?: 'country' | 'browser'
-  e164?: boolean
 }>(), {
   size: 'md',
-  language: 'browser',
-  e164: false
+  language: 'browser'
 })
 
 const emit = defineEmits<{
@@ -187,17 +185,20 @@ watch(selectedCountry, (newCountry) => {
   }
 })
 
-// Handle input with AsYouType formatting (local only, no emit)
+// Handle input with AsYouType formatting and real-time validation
 const handleInput = (event: Event) => {
-  const input = ( event.target as HTMLInputElement ).value
+  const input = (event.target as HTMLInputElement).value
 
-  if (asYouType.value && selectedCountry.value) {
-    asYouType.value.reset()
-    const formatted = asYouType.value.input(input)
-    localNumber.value = formatted
-  } else {
-    localNumber.value = input
-  }
+  // Format display with AsYouType
+  asYouType.value.reset()
+  const formatted = asYouType.value.input(input)
+  localNumber.value = formatted
+
+  // Validate and emit on every keystroke
+  const { isValid, phoneNumber } = validateAndParsePhoneNumber()
+  emit('update:valid', isValid)
+  emit('update:country', getCountryInfo())
+  emit('update:modelValue', phoneNumber)
 }
 
 // Get country info for error messages
@@ -222,29 +223,26 @@ const getCountryInfo = (): CountryInfo => {
   }
 }
 
-// Validate and emit on blur
-const handleBlur = () => {
-  // Emit country info
-  emit('update:country', getCountryInfo())
-
-  if (!selectedCountry.value || !localNumber.value.trim()) {
-    emit('update:modelValue', '')
-    emit('update:valid', false)
-    return
-  }
+// Validate and parse phone number - returns both validation state and formatted number
+const validateAndParsePhoneNumber = (): { isValid: boolean, phoneNumber: string } => {
+  let isValid = false
+  let phoneNumber = localNumber.value
 
   try {
-    // Always use built-in E.164 format for resilience
-    const e164Format = parsePhoneNumber(localNumber.value, selectedCountry.value)
-        .format('E.164')
-    emit('update:modelValue', e164Format.replace('+', props.e164 ? '+' : ''))
-    emit('update:valid', true)
-  } catch (error) {
-    // Invalid input - emit raw input so parent can distinguish from empty
-    console.warn('Phone validation error:', error)
-    emit('update:modelValue', localNumber.value)
-    emit('update:valid', false)
+    const parsed = parsePhoneNumberWithError(localNumber.value, selectedCountry.value)
+    phoneNumber = parsed.format('E.164')
+    isValid = true
+  } catch {
+    // Parse failed - keep raw value
+  } finally {
+    return { isValid, phoneNumber }
   }
+}
+
+// Handle blur - emit country info for parent to mark field as dirty
+const handleBlur = () => {
+  emit('update:country', getCountryInfo())
+  // Validation already handled in handleInput
 }
 
 // Detect country from browser locale
