@@ -4,6 +4,7 @@ import {
   getCountries,
   getCountryCallingCode,
   getExampleNumber,
+  parsePhoneNumber,
   parsePhoneNumberWithError
 } from 'libphonenumber-js/mobile'
 import examples from 'libphonenumber-js/mobile/examples'
@@ -42,8 +43,12 @@ const emit = defineEmits<{
   'blur': []
 }>()
 
-const selectedCountry = ref<string>('')
-const localNumber = ref<string>('')
+const selectedCountry = ref<string>(
+  parsePhoneNumber(modelValue.value)?.country || detectCountryFromBrowser()
+)
+const localNumber = ref<string>(
+  parsePhoneNumber(modelValue.value)?.formatNational() || ''
+)
 const asYouType = ref<AsYouType | null>(null)
 
 // Cache for country lists by language key (browser, country, or specific language code)
@@ -292,22 +297,6 @@ const detectCountryFromBrowser = (): string => {
 
 // Initialize countries on mount
 onMounted(() => {
-  // Parse initial value or detect country first
-  if (modelValue.value) {
-    try {
-      const phoneNumber = parsePhoneNumberWithError(`+${modelValue.value}`)
-      if (phoneNumber) {
-        selectedCountry.value = phoneNumber.country || ''
-        localNumber.value = phoneNumber.formatNational()
-      }
-    } catch {
-      // Invalid initial value, ignore
-    }
-  } else {
-    // Auto-detect country from browser
-    selectedCountry.value = detectCountryFromBrowser()
-  }
-
   // Initialize country list immediately
   // This runs during mount (before user can interact) and populates the cache
   // Subsequent dropdown opens are instant from cache
@@ -326,7 +315,7 @@ onMounted(() => {
         placeholder="Country"
         :size="size"
         :content="{ align: 'start' }"
-        :ui="{ base: 'w-24', content: 'w-fit max-w-96' }"
+        :ui="{ base: 'w-28', content: 'w-fit max-w-96' }"
         virtualized
     >
       <!-- Compact trigger: flag + dial code only -->
