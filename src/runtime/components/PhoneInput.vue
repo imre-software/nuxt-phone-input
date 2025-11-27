@@ -43,11 +43,60 @@ const emit = defineEmits<{
   'blur': []
 }>()
 
+// Safe wrapper that never throws
+const safeParsePhoneNumber = (value: string) => {
+  if (!value || !value.trim()) return null
+  try {
+    return parsePhoneNumber(value)
+  } catch {
+    return null
+  }
+}
+
+// Detect country from browser locale
+const detectCountryFromBrowser = (): string => {
+  try {
+    // Try to get country from navigator.language (e.g., "en-US" -> "US")
+    const locale = navigator.language
+    const countryCode = locale.split('-')[1]?.toUpperCase()
+
+    // Validate that the country code exists in our list
+    if (countryCode && getCountries().includes(countryCode)) {
+      return countryCode
+    }
+
+    // Fallback: try to detect from timezone
+    const timeZone = Intl.DateTimeFormat().resolvedOptions().timeZone
+    // Common timezone to country mappings
+    const tzMap: Record<string, string> = {
+      'America/New_York': 'US',
+      'America/Los_Angeles': 'US',
+      'America/Chicago': 'US',
+      'Europe/London': 'GB',
+      'Europe/Paris': 'FR',
+      'Europe/Berlin': 'DE',
+      'Asia/Jerusalem': 'IL',
+      'Asia/Tokyo': 'JP',
+      'Australia/Sydney': 'AU',
+    }
+
+    const detectedCountry = tzMap[timeZone]
+    if (detectedCountry && getCountries().includes(detectedCountry)) {
+      return detectedCountry
+    }
+  } catch {
+    // Detection failed, will use default
+  }
+
+  // Default to US if detection fails
+  return 'US'
+}
+
 const selectedCountry = ref<string>(
-  parsePhoneNumber(modelValue.value)?.country || detectCountryFromBrowser()
+  safeParsePhoneNumber(modelValue.value)?.country || detectCountryFromBrowser()
 )
 const localNumber = ref<string>(
-  parsePhoneNumber(modelValue.value)?.formatNational() || ''
+  safeParsePhoneNumber(modelValue.value)?.formatNational() || ''
 )
 const asYouType = ref<AsYouType | null>(null)
 
@@ -181,10 +230,10 @@ const placeholder = computed(() => {
 // Initialize AsYouType when country changes
 watch(selectedCountry, (newCountry) => {
   if (newCountry) {
-    asYouType.value = new AsYouType(newCountry)
+    asYouType.value = new AsYouType(newCountry || 'US')
     localNumber.value = ''
-    // Update country info when country changes
-    country.value = getCountryInfo()
+    // Note: country.value is initialized in onMounted to prevent synchronous updates during setup
+    // It's then updated in handleInput/handleBlur during user interactions
     // Note: Don't emit blur here - only on actual user blur to prevent isDirty from being set during initialization
   }
 })
@@ -192,6 +241,11 @@ watch(selectedCountry, (newCountry) => {
 // Handle input with AsYouType formatting and real-time validation
 const handleInput = (event: Event) => {
   const input = (event.target as HTMLInputElement).value
+
+  // Ensure asYouType exists
+  if (!asYouType.value) {
+    asYouType.value = new AsYouType(selectedCountry.value || 'US')
+  }
 
   // Format display with AsYouType
   asYouType.value.reset()
@@ -256,51 +310,15 @@ const handleBlur = () => {
   // Validation already handled in handleInput
 }
 
-// Detect country from browser locale
-const detectCountryFromBrowser = (): string => {
-  try {
-    // Try to get country from navigator.language (e.g., "en-US" -> "US")
-    const locale = navigator.language
-    const countryCode = locale.split('-')[1]?.toUpperCase()
-
-    // Validate that the country code exists in our list
-    if (countryCode && getCountries().includes(countryCode)) {
-      return countryCode
-    }
-
-    // Fallback: try to detect from timezone
-    const timeZone = Intl.DateTimeFormat().resolvedOptions().timeZone
-    // Common timezone to country mappings
-    const tzMap: Record<string, string> = {
-      'America/New_York': 'US',
-      'America/Los_Angeles': 'US',
-      'America/Chicago': 'US',
-      'Europe/London': 'GB',
-      'Europe/Paris': 'FR',
-      'Europe/Berlin': 'DE',
-      'Asia/Jerusalem': 'IL',
-      'Asia/Tokyo': 'JP',
-      'Australia/Sydney': 'AU',
-    }
-
-    const detectedCountry = tzMap[timeZone]
-    if (detectedCountry && getCountries().includes(detectedCountry)) {
-      return detectedCountry
-    }
-  } catch {
-    // Detection failed, will use default
-  }
-
-  // Default to US if detection fails
-  return 'US'
-}
-
 // Initialize countries on mount
 onMounted(() => {
   // Initialize country list immediately
   // This runs during mount (before user can interact) and populates the cache
   // Subsequent dropdown opens are instant from cache
   initializeCountries()
+
+  // Initialize country info after mount (not during setup) to prevent cascading updates
+  country.value = getCountryInfo()
 })
 </script>
 
