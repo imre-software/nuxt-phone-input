@@ -1,12 +1,14 @@
 import { defineNuxtModule, addPlugin, addComponentsDir, createResolver } from '@nuxt/kit'
 
+export type { Country, CountryInfo } from './runtime/types'
+
 // Module options TypeScript interface definition
 export interface ModuleOptions {}
 
 export default defineNuxtModule<ModuleOptions>({
   meta: {
-    name: 'my-module',
-    configKey: 'myModule',
+    name: 'nuxt-phone-input',
+    configKey: 'phoneInput',
   },
   // Default configuration options of the Nuxt module
   defaults: {},

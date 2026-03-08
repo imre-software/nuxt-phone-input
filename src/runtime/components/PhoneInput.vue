@@ -8,21 +8,7 @@ import {
   parsePhoneNumberWithError
 } from 'libphonenumber-js/mobile'
 import examples from 'libphonenumber-js/mobile/examples'
-
-interface Country {
-  code: string
-  dialCode: string
-  name: string
-  icon: string
-  label: string
-  value: string
-  direction: 'ltr' | 'rtl'
-}
-
-interface CountryInfo {
-  name: string
-  example: string
-}
+import type { Country, CountryInfo } from '../types'
 
 const props = withDefaults(defineProps<{
   required?: boolean
