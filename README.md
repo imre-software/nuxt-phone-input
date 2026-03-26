@@ -23,12 +23,6 @@ A Nuxt module that provides a phone number input component with international fo
 Install the module:
 
 ```bash
-npx nuxi module add nuxt-phone-input
-```
-
-Or manually:
-
-```bash
 pnpm add nuxt-phone-input
 ```
 
