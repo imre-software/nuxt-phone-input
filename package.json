@@ -1,10 +1,10 @@
 {
   "name": "nuxt-phone-input",
-  "version": "1.0.0",
+  "version": "0.1.0",
   "description": "Nuxt module adding a phone input with international formatting, validation, and country detection",
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/shayaulman/nuxt-phone-input.git"
+    "url": "git+https://github.com/imre-software/nuxt-phone-input.git"
   },
   "license": "MIT",
   "type": "module",
@@ -30,7 +30,7 @@
     "dev": "pnpm run dev:prepare && nuxi dev playground",
     "dev:build": "nuxi build playground",
     "dev:prepare": "nuxt-module-build build --stub && nuxt-module-build prepare && nuxi prepare playground",
-    "release": "pnpm run lint && pnpm run test && pnpm run prepack && changelogen --release && npm publish && git push --follow-tags",
+    "release": "changelogen --release && git push --follow-tags",
     "lint": "eslint .",
     "test": "vitest run",
     "test:watch": "vitest watch",
