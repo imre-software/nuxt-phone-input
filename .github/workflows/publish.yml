@@ -42,6 +42,10 @@ jobs:
         if: steps.version.outputs.exists == 'false'
         run: npx nypm@latest i
 
+      - name: Prepare
+        if: steps.version.outputs.exists == 'false'
+        run: pnpm nuxt-module-build prepare
+
       - name: Build
         if: steps.version.outputs.exists == 'false'
         run: pnpm prepack
