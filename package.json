@@ -1,6 +1,6 @@
 {
   "name": "nuxt-phone-input",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "description": "Nuxt module adding a phone input with international formatting, validation, and country detection",
   "repository": {
     "type": "git",
