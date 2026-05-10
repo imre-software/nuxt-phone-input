@@ -14,7 +14,7 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v6
         with:
           fetch-depth: 0
 
@@ -29,18 +29,19 @@ jobs:
             echo "tag=v$VERSION" >> "$GITHUB_OUTPUT"
           fi
 
-      - uses: actions/setup-node@v4
+      - uses: pnpm/action-setup@v6
+        if: steps.version.outputs.exists == 'false'
+
+      - uses: actions/setup-node@v6
         if: steps.version.outputs.exists == 'false'
         with:
-          node-version: 22
+          node-version: latest
           registry-url: https://registry.npmjs.org
-
-      - run: npm i -g --force corepack@latest && corepack enable
-        if: steps.version.outputs.exists == 'false'
+          cache: pnpm
 
       - name: Install dependencies
         if: steps.version.outputs.exists == 'false'
-        run: npx nypm@latest i
+        run: pnpm install --frozen-lockfile
 
       - name: Prepare
         if: steps.version.outputs.exists == 'false'
@@ -61,4 +62,4 @@ jobs:
 
       - name: Publish to npm
         if: steps.version.outputs.exists == 'false'
-        run: npm publish --provenance --access public
+        run: pnpm publish --no-git-checks --access public
